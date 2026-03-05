@@ -14,34 +14,85 @@ import os
 def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     wc, E = param_cav
     wm = param_mol[0:num_mol]
-    gamma = param_mol[-1]
+    lam = param_mol[-1]
     
-    a_xc = - xc * wc**2  - gamma *(np.sum(xm_values)) #- k * vc
+    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  - gamma * xc - gamma**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
     
     return a_xc, a_xm_values
 
 def Pauli_Fierz_driven(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
+    """
+    The photon is driven with an oscillating 
+    field, with frequency wc and amplitude E. 
+
+    """
+
     wc, E = param_cav
     wm = param_mol[0:num_mol]
-    gamma = param_mol[-1]
+    lam = param_mol[-1]
     
-    a_xc = E * np.cos(wc * t) - xc * wc**2  - gamma *(np.sum(xm_values)) #- k * vc
+    a_xc = E * np.cos(wc * t) - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) #- k * vc
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  - gamma * xc - gamma**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
     
     return a_xc, a_xm_values
 
+
+def Pauli_Fierz_static_global(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
+    """
+    A static electric field E which induces a Stark shift is 
+    applied to all molecules. 
+
+    """
+    wc, E = param_cav
+    wm = param_mol[0:num_mol]
+    lam = param_mol[-1]
+    
+    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
+    
+    a_xm_values = np.zeros(num_mol)
+    for i in range(num_mol):
+        a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+    
+    return a_xc, a_xm_values
+
+
+
+def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
+    """
+    A static electric field E which induces a Stark shift is 
+    applied only to the 0-th molecule. 
+
+    """
+    wc, E = param_cav
+    wm = param_mol[0:num_mol]
+    lam = param_mol[-1]
+    
+    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
+    
+    a_xm_values = np.zeros(num_mol)
+    for i in range(num_mol):
+        if i == 0:
+            a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+        else:
+            a_xm_values[i] = -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+
+    return a_xc, a_xm_values
 
 #------------------------------------------------------------------------------------------#
 
 ''' Define Velocity Verlet algorithm'''
 def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
+    """
+    Velocity verlet algorith implementing the generalized langevin EOM
+    from Tuckerman, eq (15.5.17)
+    """
     n_points = len(time_points)
     dt = time_points[1] - time_points[0]
     
@@ -131,6 +182,9 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
 
 
 
+
+#-------------------------------------------------------------------------------------#
+
 if __name__ == "__main__":
 
 
@@ -143,20 +197,19 @@ if __name__ == "__main__":
     num_mol = 10
 
     # Set up parameters
-    wc = 0.0161 
-    wm = 0.0161 # freqs au of the CH sym stretch in CHCl3
-    E0 = 0.0 #0.00009 #0.0005 # Amplitude of driving laser
+    wc = 0.005512
+    wm = 0.005512 # freqs au of a C=C bond
+    E0 = 0.0 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
-    #freqs = np.random.normal(wm, 0.0002, num_mol)  # wm
-    freqs = [0.0158667, 0.01628286, 0.01618053, 0.0160544,  0.01621614, 0.01600337, 0.01590205, 0.01618737, 0.01633669, 0.01622438]
-    gc =0.0
-    gamma = gc/np.sqrt(num_mol) # light-matter coupling
-    param_mol = freqs + [gamma] # wm, gamma
+    freqs = np.random.normal(wm, 0.001, num_mol)  # wm
+    gc =0.0 
+    lam = gc/np.sqrt(num_mol) # light-matter coupling
+    param_mol = freqs + [lam] # wm, lamba
 
     # Set up friction coefficients k, lamb and random kick sigma: 
     k    = 5.46e-6
     lamb = 5.46e-6
-    kT   = 0.000944*0.01 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
+    kT   = 0.01*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
     sigma_c = np.sqrt(2*kT*k/mu)
@@ -182,10 +235,10 @@ if __name__ == "__main__":
 
 
     # Define time pointsp
-    time_points = np.arange(0, 2000000, 100)  # Time points from 0 to 10
+    time_points = np.arange(0, 2000, 100)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
-    xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_driven, init_cond, time_points, num_mol, param_cav, param_mol)
+    xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_static_global, init_cond, time_points, num_mol, param_cav, param_mol)
 
     # Check temperature consistency with equipartition theorem
     message = check_temperature_consistency(vc_values_eq, vm_values_eq, kT, num_mol)
