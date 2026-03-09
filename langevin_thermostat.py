@@ -11,6 +11,7 @@ import os
 
 '''Define accelerations based on different hamiltonians'''
 
+
 def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     wc, E = param_cav
     wm = param_mol[0:num_mol]
@@ -70,10 +71,12 @@ def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, p
     applied only to the 0-th molecule. 
 
     """
+
     wc, E = param_cav
     wm = param_mol[0:num_mol]
     lam = param_mol[-1]
-    
+   
+
     a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
     
     a_xm_values = np.zeros(num_mol)
@@ -148,13 +151,13 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     """
     
     # Calculate the time-averaged <v^2> for the photon
-    v2_photon = np.mean(vc_values[-40000:] ** 2)
+    v2_photon = np.mean(vc_values[-400:] ** 2)
 
     # Calculate the time-averaged <v^2> for each molecule
     v2_molecules = np.zeros(num_mol)
 
     for j in range(num_mol):
-        v2_molecules[j] = np.mean(vm_values[j, -40000:] ** 2)  # Average over time for each molecule
+        v2_molecules[j] = np.mean(vm_values[j, -400:] ** 2)  # Average over time for each molecule
     
     # Average <v^2> across all molecules
     avg_v2_molecules = np.mean(v2_molecules)
@@ -173,11 +176,28 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     system_consistent = np.isclose(total_avg_v2, kT, rtol=0.2)
 
     if system_consistent:
-        message = print("The time-averaged velocities of the photon and molecules are consistent with the initial temperature.")
+        message =("The time-averaged velocities of the photon and molecules are consistent with the initial temperature.")
     else:
         message =("The time-averaged velocities of the photon and molecules are NOT consistent with the initial temperature.")
-    
+        exit()
     return message
+
+
+
+''' Define analysis tool functions '''
+
+def autocorr(pos_values):
+    results = np.correlate(pos_values, pos_values, mode='full')
+    results = results[results.size // 2:]
+    C_xx = results / results[0]
+    return C_xx
+
+
+
+def fft_autocorr(autocorr):
+    fft = np.fft.fft(autocorr)
+    fftfreq = 2*np.pi*np.fft.fftfreq(fft.shape[-1], d=t_step)
+    return fft, fftfreq
 
 
 
@@ -187,29 +207,35 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
 
 if __name__ == "__main__":
 
+    # Definite conversion factors:
+
+    aut_to_fs = 0.0241888
+    au_to_ev  = 27.2114
+
 
     ##########################################
     ''' DEFINE PARAMETERS (Thermalization) '''
     ##########################################
 
-
     # Set up number of molecules:
-    num_mol = 10
-
+    num_mol = 8
+    
     # Set up parameters
     wc = 0.005512
     wm = 0.005512 # freqs au of a C=C bond
+
+
     E0 = 0.0 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
-    freqs = np.random.normal(wm, 0.001, num_mol)  # wm
+    freqs = np.random.normal(wm, 0.0, num_mol)  # wm
     gc =0.0 
     lam = gc/np.sqrt(num_mol) # light-matter coupling
-    param_mol = freqs + [lam] # wm, lamba
+    param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Set up friction coefficients k, lamb and random kick sigma: 
-    k    = 5.46e-6
-    lamb = 5.46e-6
-    kT   = 0.01*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
+    k    = 5.46e-4
+    lamb = 5.46e-4
+    kT   = 0.1*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
     sigma_c = np.sqrt(2*kT*k/mu)
@@ -218,7 +244,7 @@ if __name__ == "__main__":
     # Not really that important how the initial conditions are chosen, because of Markovianity
     # Molecules
     std_x = 1/np.sqrt(beta)
-    std_v = 1/np.sqrt(beta * wm**2)*0.1
+    std_v = 1/np.sqrt(beta * wm**2)*0.05
 
     init_xm = np.random.normal(0, std_x, num_mol)
     init_vm = np.random.normal(0, std_v, num_mol)
@@ -228,21 +254,36 @@ if __name__ == "__main__":
     theta = np.random.uniform(0, 2*np.pi,1).item()
 
     init_xc = np.sqrt(2 * I / (wc)) * np.sin(theta)
-    init_vc = np.sqrt(2 * I * wc) * np.cos(theta) * 0.1
+    init_vc = np.sqrt(2 * I * wc) * np.cos(theta) * 0.05
+
+
 
     # Combine initial conditions into a single list
     init_cond = [init_xc, init_vc] + init_xm.tolist() + init_vm.tolist()
 
 
     # Define time pointsp
-    time_points = np.arange(0, 2000, 100)  # Time points from 0 to 10
+    t_eq = 40000
+    t_step  = 10
+    time_points = np.arange(0, t_eq, t_step)  # Time points from 0 to 10
+  
 
-    # Solve the system using Velocity-Verlet algorithm
-    xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_static_global, init_cond, time_points, num_mol, param_cav, param_mol)
+    # Run the equilibration consistency check a few times to ensure equilibration is reached6 
 
-    # Check temperature consistency with equipartition theorem
-    message = check_temperature_consistency(vc_values_eq, vm_values_eq, kT, num_mol)
-    print(message)
+    for i in range(0,80):
+        i=0
+        xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
+        message = check_temperature_consistency(vc_values_eq, vm_values_eq, kT, num_mol)
+
+        if message == ("The time-averaged velocities of the photon and molecules are consistent with the initial temperature."):
+            print(message)
+            break
+        else:
+            i +=1
+            print('Equilibration failed, modify system parameters')
+
+
+    
 
 
 
@@ -253,6 +294,70 @@ if __name__ == "__main__":
     # Photon 
     init_xc = xc_values_eq[-1]
     init_vc = vc_values_eq[-1]
+
+    init_cond = [init_xc, init_vc] + init_xm.tolist() + init_vm.tolist()
+
+
+    # Define time points
+    t_final = t_eq
+    time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
+
+    # Solve the system using Velocity-Verlet algorithm
+    xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
+
+
+    C_xcxc = autocorr(xc_values)
+
+    fft, fftfreq = fft_autocorr(C_xcxc)
+
+  
+    
+
+
+
+
+
+    # Plot the results
+    plt.figure(figsize=[18,12])
+    plt.title('Coupled Generalized Langevin')
+    plt.plot(time_points*aut_to_fs, xc_values_eq, label='xc(t)', color='black')
+    for i in range(num_mol):
+        plt.plot(time_points*aut_to_fs, xm_values_eq[i], label=f'xm{i+1}(t)')
+    #plt.ylim(-4,8)
+    plt.xlabel('Time (fs)')
+    plt.ylabel('Values')
+
+    #plt.legend()
+
+    plt.show()
+
+    # Plot the results
+    plt.figure(figsize=[12,6])
+    plt.title('Autocorrelation function')
+    plt.plot(time_points*aut_to_fs, C_xcxc, label='C_xcxc(t)', color='black')
+    #for i in range(num_mol):
+    #    plt.plot(time_points*aut_to_fs, xm_values_eq[i], label=f'xm{i+1}(t)')
+    #plt.ylim(-4,8)
+    plt.xlabel('Time (fs)')
+    plt.ylabel('Values')
+
+    #plt.legend()
+
+    plt.show()
+
+
+    plt.figure(figsize=[12,6])
+    plt.title('Autocorrelation function')
+    plt.plot(fftfreq, np.abs(fft.real)/np.max(np.abs(fft.real)), color='black', label='xc_values')
+    plt.xlim(0.0, 0.01)
+    plt.xlabel('Time (fs)')
+    plt.ylabel('Values')
+
+    #plt.legend()
+
+    plt.show()
+
+
 
 
     # Save initial positions to a text file
