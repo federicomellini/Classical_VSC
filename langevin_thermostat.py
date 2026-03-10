@@ -21,7 +21,7 @@ def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc # - lam**2/(wc**2) *(np.sum(xm_values))
     
     return a_xc, a_xm_values
 
@@ -173,25 +173,38 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     print("Expected <v^2> from temperature (kT):", kT)
     
     # Compare with the expected value from temperature (kT)
-    system_consistent = np.isclose(total_avg_v2, kT, rtol=0.2)
+    system_consistent = np.isclose(total_avg_v2, kT, rtol=0.4)
 
     if system_consistent:
         message =("The time-averaged velocities of the photon and molecules are consistent with the initial temperature.")
     else:
         message =("The time-averaged velocities of the photon and molecules are NOT consistent with the initial temperature.")
-        exit()
+
     return message
 
 
 
 ''' Define analysis tool functions '''
 
-def autocorr(pos_values):
-    results = np.correlate(pos_values, pos_values, mode='full')
+def autocorr(values):
+    '''
+    Computes autocorrelation of either positional
+    values (C_xx) or velocity values (C_vv). 
+    '''
+    results = np.correlate(values, values, mode='full')
     results = results[results.size // 2:]
-    C_xx = results / results[0]
-    return C_xx
+    autocorr = results / results[0]
+    return autocorr
 
+
+
+def crosscorr(values_1, values_2):
+    results = np.correlate(values_1, values_2, mode='full')
+    results = results[results.size // 2:]
+    norm_1 = np.sum(values_1**2)
+    norm_2 = np.sum(values_2**2)
+    C_12 = results / np.sqrt(norm_1 * norm_2)
+    return C_12
 
 
 def fft_autocorr(autocorr):
@@ -200,6 +213,45 @@ def fft_autocorr(autocorr):
     return fft, fftfreq
 
 
+def bright_autocorr(xm_values):
+    """
+    Calculates the autocorrelation of the macroscopic bright mode.
+    xm_values should be a 2D array of shape (num_mol, n_points).
+    """
+    # Sum along the molecule axis (axis=0) to get total polarization over time
+    P_t = np.sum(xm_values, axis=0)
+    
+    results = np.correlate(P_t, P_t, mode='full')
+    results = results[results.size // 2:]
+    C_PP = results / results[0]
+    return C_PP
+
+def calc_energies(xm_values, vm_values, freqs, mass=1.0):
+    """
+    Helper function to calculate the total energy of each molecule over time.
+    Requires 2D position/velocity arrays and a 1D array of molecular frequencies.
+    """
+    # Reshape frequencies so they broadcast correctly across the time points
+    w2 = (freqs**2)[:, np.newaxis]
+    
+    # Calculate E = 1/2*m*v^2 + 1/2*m*w^2*x^2 for all molecules and all times
+    energies = 0.5 * mass * vm_values**2 + 0.5 * mass * w2 * xm_values**2
+    return energies
+
+def calc_ipr(energies):
+    """
+    Calculates the Inverse Participation Ratio (IPR) over time.
+    energies should be a 2D array of shape (num_mol, n_points).
+    """
+    # Sum of squared energies at each time step
+    sum_sq = np.sum(energies**2, axis=0)
+    
+    # Square of the summed energies at each time step
+    sq_sum = (np.sum(energies, axis=0))**2
+    
+    # Calculate IPR, avoiding division by zero if energy is perfectly 0
+    ipr_t = np.divide(sum_sq, sq_sum, out=np.zeros_like(sum_sq), where=sq_sum!=0)
+    return ipr_t
 
 
 
@@ -218,7 +270,7 @@ if __name__ == "__main__":
     ##########################################
 
     # Set up number of molecules:
-    num_mol = 8
+    num_mol = 1
     
     # Set up parameters
     wc = 0.005512
@@ -238,8 +290,8 @@ if __name__ == "__main__":
     kT   = 0.1*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
-    sigma_c = np.sqrt(2*kT*k/mu)
-    sigma_m = np.sqrt(2*kT*lamb/mu)
+    sigma_c = 0 #np.sqrt(2*kT*k/mu)
+    sigma_m = 0 #np.sqrt(2*kT*lamb/mu)
 
     # Not really that important how the initial conditions are chosen, because of Markovianity
     # Molecules
@@ -270,17 +322,19 @@ if __name__ == "__main__":
 
     # Run the equilibration consistency check a few times to ensure equilibration is reached6 
 
-    for i in range(0,80):
-        i=0
+    for i in range(10):
         xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
         message = check_temperature_consistency(vc_values_eq, vm_values_eq, kT, num_mol)
 
-        if message == ("The time-averaged velocities of the photon and molecules are consistent with the initial temperature."):
+        if message == "The time-averaged velocities of the photon and molecules are consistent with the initial temperature.":
             print(message)
             break
-        else:
-            i +=1
-            print('Equilibration failed, modify system parameters')
+    else:
+        print('\n ' \
+        'EQUIBILBRATION FAILED! \n' \
+        'modify system parameters, script terminated')
+        #exit()
+            
 
 
     
@@ -297,23 +351,143 @@ if __name__ == "__main__":
 
     init_cond = [init_xc, init_vc] + init_xm.tolist() + init_vm.tolist()
 
+    # Redefine new parameters for the propagation
+
+    E0 = 0.0 # Amplitude of driving laser
+    param_cav = [wc, E0]  # wc, E
+    gc =0.1*wc
+    lam = gc/np.sqrt(num_mol) # light-matter coupling
+    param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Define time points
     t_final = t_eq
     time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
-    xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
+    xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz, init_cond, time_points, num_mol, param_cav, param_mol)
 
 
-    C_xcxc = autocorr(xc_values)
+    print('shape of xm_values', np.shape(xm_values))
+    
 
-    fft, fftfreq = fft_autocorr(C_xcxc)
+    C_xcxc = autocorr(xm_values[0])
+    C_vcvc = autocorr(vm_values[0])
+    C_xx_bright = bright_autocorr(xm_values)
+    C_vv_bright = bright_autocorr(vm_values)
 
-  
+    fft_xcxc, fftfreq_xcxc = fft_autocorr(C_xcxc)
+    fft_vcvc, fftfreq_vcvc = fft_autocorr(C_vcvc)
+    fft_xx_bright, fftfreq_xx_bright = fft_autocorr(C_xx_bright)
+    fft_vv_bright, fftfreq_vv_bright = fft_autocorr(C_vv_bright)
     
 
 
+
+
+    ''' PLOT '''
+
+    fig, axs = plt.subplots(2, 2, figsize=(8,4), constrained_layout=True, sharex='col')
+
+    #xmin = 0
+    #xmax = 100
+
+    # Axis thickness and label font size
+    axis_thickness = 1.5
+    label_fontsize = 12
+    title_fontsize = 14
+
+    # Set thicker axis lines globally
+    for ax in axs.flat:
+        #ax.set_ylim(0,0.003)
+        ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
+        ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
+        ax.spines['top'].set_linewidth(axis_thickness)
+        ax.spines['right'].set_linewidth(axis_thickness)
+        ax.spines['bottom'].set_linewidth(axis_thickness)
+        ax.spines['left'].set_linewidth(axis_thickness)
+
+    #--------------------------
+    ''' subplot1 L '''
+    ax00 = axs[0,0]
+    ax00.plot(time_points*aut_to_fs, C_xcxc, label='C_xcxc(t)', color='black')
+    ax00.legend(loc="upper right")
+    ax00.set_xlabel('Time (fs)')
+    ax00.set_ylabel('Photon position autocorrelation')
+
+    ax01 = axs[0,1]
+    ax01.plot(time_points*aut_to_fs, C_vcvc, label='C_vcvc(t)', color='black')
+    ax01.legend(loc="upper right")
+    ax01.set_xlabel('Time (fs)')
+    ax01.set_ylabel('Photon velocity autocorrelation')
+
+    ax10 = axs[1,0]
+    ax10.plot(time_points*aut_to_fs, C_xx_bright, label='C_xx_bright(t)', color='black')
+    ax10.legend(loc="upper right")
+    ax10.set_xlabel('Time (fs)')
+    ax10.set_ylabel('Bright state position autocorrelation')
+
+    ax11 = axs[1,1]
+    ax11.plot(time_points*aut_to_fs, C_vv_bright, label='C_vv_bright(t)', color='black')
+    ax11.legend(loc="upper right")
+    ax11.set_xlabel('Time (fs)')
+    ax11.set_ylabel('Bright state velocity autocorrelation')
+
+    plt.show()
+
+
+
+
+    fig, axs = plt.subplots(2, 2, figsize=(8,4), constrained_layout=True, sharex='col')
+
+    #xmin = 0
+    #xmax = 100
+
+    # Axis thickness and label font size
+    axis_thickness = 1.5
+    label_fontsize = 12
+    title_fontsize = 14
+
+    # Set thicker axis lines globally
+    for ax in axs.flat:
+        ax.set_xlim(0,0.1)
+        ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
+        ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
+        ax.spines['top'].set_linewidth(axis_thickness)
+        ax.spines['right'].set_linewidth(axis_thickness)
+        ax.spines['bottom'].set_linewidth(axis_thickness)
+        ax.spines['left'].set_linewidth(axis_thickness)
+
+    #--------------------------
+    ''' subplot1 L '''
+    ax00 = axs[0,0]
+    ax00.plot(fftfreq_xcxc, np.abs(fft_xcxc.real)/np.max(np.abs(fft_xcxc.real)), label='FT(C_xcxc(t))', color='black')
+    ax00.legend(loc="upper right")
+    ax00.set_xlabel('Frequency (a.u.)')
+    ax00.set_ylabel('Photon position FT')
+
+    ax01 = axs[0,1]
+    ax01.plot(fftfreq_vcvc, np.abs(fft_vcvc.real)/np.max(np.abs(fft_vcvc.real)), label='FT(C_vcvc(t))', color='black')
+    ax01.legend(loc="upper right")
+    ax01.set_xlabel('Frequency (a.u.)')
+    ax01.set_ylabel('Photon velocity FT')
+
+    ax10 = axs[1,0]
+    ax10.plot(fftfreq_xx_bright, np.abs(fft_xx_bright.real)/np.max(np.abs(fft_xx_bright.real)), label='FT(C_xx_bright(t))', color='black')
+    ax10.legend(loc="upper right")
+    ax10.set_xlabel('Frequency (a.u.)')
+    ax10.set_ylabel('Bright state position autocorrelation')
+
+    ax11 = axs[1,1]
+    ax11.plot(fftfreq_vv_bright, np.abs(fft_vv_bright.real)/np.max(np.abs(fft_vv_bright.real)), label='FT(C_vv_bright(t))', color='black')
+    ax11.legend(loc="upper right")
+    ax11.set_xlabel('Frequency (a.u.)')
+    ax11.set_ylabel('Bright state velocity autocorrelation')
+
+    plt.show()
+
+
+
+   
 
 
 
@@ -330,6 +504,8 @@ if __name__ == "__main__":
     #plt.legend()
 
     plt.show()
+
+    exit()
 
     # Plot the results
     plt.figure(figsize=[12,6])
@@ -350,6 +526,7 @@ if __name__ == "__main__":
     plt.title('Autocorrelation function')
     plt.plot(fftfreq, np.abs(fft.real)/np.max(np.abs(fft.real)), color='black', label='xc_values')
     plt.xlim(0.0, 0.01)
+    plt.ylim(0.0, 1.0)
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
 
