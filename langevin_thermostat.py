@@ -12,7 +12,7 @@ import os
 '''Define accelerations based on different hamiltonians'''
 
 
-def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
+def Pauli_Fierz_old(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     wc, E = param_cav
     wm = param_mol[0:num_mol]
     lam = param_mol[-1]
@@ -21,9 +21,27 @@ def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc # - lam**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  - np.sqrt(0.5*wc) * lam * xc - lam**2/(wc*2) *(np.sum(xm_values))
     
     return a_xc, a_xm_values
+
+def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
+    wc, E = param_cav
+    wm = param_mol[0:num_mol]
+    lam = param_mol[-1]
+    
+    # Cavity acceleration
+    a_xc = -(wc**2) * xc + lam * wc * np.sum(xm_values)
+    
+    # Molecule acceleration 
+    a_xm_values = np.zeros(num_mol)
+    for i in range(num_mol):
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
+    
+    return a_xc, a_xm_values
+
+
+
 
 def Pauli_Fierz_driven(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     """
@@ -36,11 +54,11 @@ def Pauli_Fierz_driven(xc, vc, xm_values, vm_values, num_mol, param_cav, param_m
     wm = param_mol[0:num_mol]
     lam = param_mol[-1]
     
-    a_xc = E * np.cos(wc * t) - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) #- k * vc
+    a_xc = E * np.cos(wc * t) -(wc**2) * xc + lam * wc * np.sum(xm_values)
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
     
     return a_xc, a_xm_values
 
@@ -55,11 +73,11 @@ def Pauli_Fierz_static_global(xc, vc, xm_values, vm_values, num_mol, param_cav, 
     wm = param_mol[0:num_mol]
     lam = param_mol[-1]
     
-    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
+    a_xc = -(wc**2) * xc + lam * wc * np.sum(xm_values) 
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
-        a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+        a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
     
     return a_xc, a_xm_values
 
@@ -77,14 +95,14 @@ def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, p
     lam = param_mol[-1]
    
 
-    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
+    a_xc = - xc * wc**2  + lam *(np.sum(xm_values)) 
     
     a_xm_values = np.zeros(num_mol)
     for i in range(num_mol):
         if i == 0:
-            a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+            a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
         else:
-            a_xm_values[i] = -xm_values[i] * wm[i]** 2  + np.sqrt(0.5*wc) * lam * xc - lam**2/(wc**2) *(np.sum(xm_values))
+            a_xm_values[i] = -xm_values[i] * wm[i]** 2  +  lam * xc * wc - (lam**2)*(np.sum(xm_values))
 
     return a_xc, a_xm_values
 
@@ -208,8 +226,17 @@ def crosscorr(values_1, values_2):
 
 
 def fft_autocorr(autocorr):
-    fft = np.fft.fft(autocorr)
+    '''
+    Implement zero-padding (e.g., 9 times the original length)
+    This increases the FT bin density by a factor of 10 and 
+    makes the FT plots nicer and smoother.
+    '''  
+    pad_length = len(autocorr) * 9
+    padded_autocorr = np.pad(autocorr, (0, pad_length), mode='constant')
+    
+    fft = np.fft.fft(padded_autocorr)
     fftfreq = 2*np.pi*np.fft.fftfreq(fft.shape[-1], d=t_step)
+    
     return fft, fftfreq
 
 
@@ -280,13 +307,13 @@ if __name__ == "__main__":
     E0 = 0.0 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
     freqs = np.random.normal(wm, 0.0, num_mol)  # wm
-    gc =0.0 
+    gc =0.0*wm 
     lam = gc/np.sqrt(num_mol) # light-matter coupling
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Set up friction coefficients k, lamb and random kick sigma: 
-    k    = 5.46e-4
-    lamb = 5.46e-4
+    k    = 0 #5.46e-4 Friction coeff for photon
+    lamb = 0 #5.46e-4 Friction coeff for molecules
     kT   = 0.1*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
@@ -338,7 +365,7 @@ if __name__ == "__main__":
 
 
     
-
+    ''' Take initial condition from equilibration run and propagate '''
 
 
     # Molecules
@@ -449,7 +476,7 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        ax.set_xlim(0,0.1)
+        ax.set_xlim(0,0.007)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
         ax.spines['top'].set_linewidth(axis_thickness)
