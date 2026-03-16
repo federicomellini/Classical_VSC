@@ -12,104 +12,61 @@ import os
 '''Define accelerations based on different hamiltonians'''
 
 
-def Pauli_Fierz_old(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
-    wc, E = param_cav
-    wm = param_mol[0:num_mol]
-    lam = param_mol[-1]
-    
-    a_xc = - xc * wc**2  - np.sqrt(0.5*wc) * lam *(np.sum(xm_values)) 
-    
-    a_xm_values = np.zeros(num_mol)
-    for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  - np.sqrt(0.5*wc) * lam * xc - lam**2/(wc*2) *(np.sum(xm_values))
-    
-    return a_xc, a_xm_values
+import numpy as np
+
+
 
 def Pauli_Fierz(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
     wc, E = param_cav
-    wm = param_mol[0:num_mol]
+    wm = np.array(param_mol[0:num_mol])
     lam = param_mol[-1]
     
-    # Cavity acceleration
-    a_xc = -(wc**2) * xc + lam * wc * np.sum(xm_values)
-    
-    # Molecule acceleration 
-    a_xm_values = np.zeros(num_mol)
-    for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
+    sum_xm = np.sum(xm_values)
+    a_xc = -(wc**2) * xc + lam * wc * sum_xm
+    a_xm_values = -xm_values * wm**2 + lam * xc * wc - (lam**2) * sum_xm
     
     return a_xc, a_xm_values
-
-
-
 
 def Pauli_Fierz_driven(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
-    """
-    The photon is driven with an oscillating 
-    field, with frequency wc and amplitude E. 
-
-    """
-
     wc, E = param_cav
-    wm = param_mol[0:num_mol]
+    wm = np.array(param_mol[0:num_mol])
     lam = param_mol[-1]
     
-    a_xc = E * np.cos(wc * t) -(wc**2) * xc + lam * wc * np.sum(xm_values)
-    
-    a_xm_values = np.zeros(num_mol)
-    for i in range(num_mol):
-        a_xm_values[i] =  -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
+    sum_xm = np.sum(xm_values)
+    a_xc = E * np.cos(wc * t) - (wc**2) * xc + lam * wc * sum_xm
+    a_xm_values = -xm_values * wm**2 + lam * xc * wc - (lam**2) * sum_xm
     
     return a_xc, a_xm_values
-
 
 def Pauli_Fierz_static_global(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
-    """
-    A static electric field E which induces a Stark shift is 
-    applied to all molecules. 
-
-    """
     wc, E = param_cav
-    wm = param_mol[0:num_mol]
+    wm = np.array(param_mol[0:num_mol])
     lam = param_mol[-1]
     
-    a_xc = -(wc**2) * xc + lam * wc * np.sum(xm_values) 
-    
-    a_xm_values = np.zeros(num_mol)
-    for i in range(num_mol):
-        a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
+    sum_xm = np.sum(xm_values)
+    a_xc = -(wc**2) * xc + lam * wc * sum_xm 
+    a_xm_values = E - xm_values * wm**2 + lam * xc * wc - (lam**2) * sum_xm
     
     return a_xc, a_xm_values
 
-
-
 def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, param_mol, t):
-    """
-    A static electric field E which induces a Stark shift is 
-    applied only to the 0-th molecule. 
-
-    """
-
     wc, E = param_cav
-    wm = param_mol[0:num_mol]
+    wm = np.array(param_mol[0:num_mol])
     lam = param_mol[-1]
    
-
-    a_xc = - xc * wc**2  + lam *(np.sum(xm_values)) 
+    sum_xm = np.sum(xm_values)
+    a_xc = -xc * wc**2 + lam * sum_xm 
+    a_xm_values = -xm_values * wm**2 + lam * xc * wc - (lam**2) * sum_xm
     
-    a_xm_values = np.zeros(num_mol)
-    for i in range(num_mol):
-        if i == 0:
-            a_xm_values[i] =  +E -xm_values[i] * wm[i]** 2  + lam * xc * wc - (lam**2)*(np.sum(xm_values))
-        else:
-            a_xm_values[i] = -xm_values[i] * wm[i]** 2  +  lam * xc * wc - (lam**2)*(np.sum(xm_values))
-
+    # Apply Stark shift only to the 0-th molecule
+    a_xm_values[0] += E
+    
     return a_xc, a_xm_values
 
 #------------------------------------------------------------------------------------------#
 
 ''' Define Velocity Verlet algorithm'''
-def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
+def velocity_verlet_old(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
     """
     Velocity verlet algorith implementing the generalized langevin EOM
     from Tuckerman, eq (15.5.17)
@@ -154,6 +111,67 @@ def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, pa
     return xc_values, vc_values, xm_values, vm_values
 
 
+def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
+    """
+    Velocity verlet algorithm implementing the generalized langevin EOM
+    from Tuckerman, eq (15.5.17)
+    """
+    n_points = len(time_points)
+    dt = time_points[1] - time_points[0]
+    
+    # Pre-calculate time step constants to save CPU cycles inside the loop
+    dt_2 = dt**2
+    dt_12 = np.sqrt(dt)
+    dt_32 = dt**(3 / 2)
+    sqrt3_inv = 1 / (2 * np.sqrt(3))
+    
+    # Initialize arrays to store positions and velocities
+    xc_values = np.zeros(n_points)
+    vc_values = np.zeros(n_points)
+    xm_values = np.zeros((num_mol, n_points))
+    vm_values = np.zeros((num_mol, n_points))
+    
+    # Set initial conditions
+    xc_values[0], vc_values[0] = init_cond[:2]
+    xm_values[:, 0] = init_cond[2:num_mol+2]
+    vm_values[:, 0] = init_cond[num_mol+2:(num_mol+2)+num_mol]
+    
+    # Calculate initial acceleration ONCE before the loop begins
+    a_xc, a_xm = acceleration(xc_values[0], vc_values[0], xm_values[:, 0], vm_values[:, 0], num_mol, param_cav, param_mol, time_points[0])
+    
+    for i in range(n_points - 1):
+        t = time_points[i]
+        
+        # Vectorized noise generation: generate random arrays for all molecules at once
+        xi_c, theta_c = np.random.normal(0.0, 1.0, 2)
+        xi_m = np.random.normal(0.0, 1.0, num_mol)
+        theta_m = np.random.normal(0.0, 1.0, num_mol)
+        
+        # Calculate stochastic position updates
+        R_c = sigma_c * dt_32 * (0.5 * xi_c + sqrt3_inv * theta_c)
+        R_m = sigma_m * dt_32 * (0.5 * xi_m + sqrt3_inv * theta_m)
+        
+        # Update positions
+        xc_values[i + 1] = xc_values[i] + vc_values[i] * dt + 0.5 * (a_xc - k * vc_values[i]) * dt_2 + R_c
+        xm_values[:, i + 1] = xm_values[:, i] + vm_values[:, i] * dt + 0.5 * (a_xm - lamb * vm_values[:, i]) * dt_2 + R_m
+        
+        # Calculate NEW accelerations at the new positions
+        a_xc_new, a_xm_new = acceleration(xc_values[i + 1], vc_values[i], xm_values[:, i + 1], vm_values[:, i], num_mol, param_cav, param_mol, t + dt)
+        
+        # Update velocities
+        vc_values[i + 1] = (vc_values[i] + 0.5 * (a_xc + a_xc_new) * dt - k * vc_values[i] * dt 
+                            + sigma_c * dt_12 * xi_c - k * (0.5 * dt_2 * (a_xc - k * vc_values[i]) + R_c))
+        
+        vm_values[:, i + 1] = (vm_values[:, i] + 0.5 * (a_xm + a_xm_new) * dt - lamb * vm_values[:, i] * dt 
+                               + sigma_m * dt_12 * xi_m - lamb * (0.5 * dt_2 * (a_xm - lamb * vm_values[:, i]) + R_m))
+        
+        # Shift new accelerations to current for the next time step
+        a_xc, a_xm = a_xc_new, a_xm_new
+    
+    return xc_values, vc_values, xm_values, vm_values
+
+
+
 def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     """
     This function checks if the time-averaged velocities (photon + molecules) are consistent with the initial temperature.
@@ -169,7 +187,7 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     """
     
     # Calculate the time-averaged <v^2> for the photon
-    v2_photon = np.mean(vc_values[-400:] ** 2)
+    v2_photon = np.mean(vc_values[-1000:] ** 2)
 
     # Calculate the time-averaged <v^2> for each molecule
     v2_molecules = np.zeros(num_mol)
@@ -297,7 +315,7 @@ if __name__ == "__main__":
     ##########################################
 
     # Set up number of molecules:
-    num_mol = 1
+    num_mol = 10
     
     # Set up parameters
     wc = 0.005512
@@ -312,13 +330,13 @@ if __name__ == "__main__":
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Set up friction coefficients k, lamb and random kick sigma: 
-    k    = 0 #5.46e-4 Friction coeff for photon
-    lamb = 0 #5.46e-4 Friction coeff for molecules
-    kT   = 0.1*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
+    k    = 1.0e-5 # Friction coeff for photon
+    lamb = 1.0e-5 # Friction coeff for molecules
+    kT   = 1.0*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
-    sigma_c = 0 #np.sqrt(2*kT*k/mu)
-    sigma_m = 0 #np.sqrt(2*kT*lamb/mu)
+    sigma_c = np.sqrt(2*kT*k/mu)
+    sigma_m = np.sqrt(2*kT*lamb/mu)
 
     # Not really that important how the initial conditions are chosen, because of Markovianity
     # Molecules
@@ -342,7 +360,7 @@ if __name__ == "__main__":
 
 
     # Define time pointsp
-    t_eq = 40000
+    t_eq = 350000
     t_step  = 10
     time_points = np.arange(0, t_eq, t_step)  # Time points from 0 to 10
   
@@ -350,7 +368,7 @@ if __name__ == "__main__":
     # Run the equilibration consistency check a few times to ensure equilibration is reached6 
 
     for i in range(10):
-        xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
+        xc_values_eq, vc_values_eq, xm_values_eq, vm_values_eq = velocity_verlet(Pauli_Fierz, init_cond, time_points, num_mol, param_cav, param_mol)
         message = check_temperature_consistency(vc_values_eq, vm_values_eq, kT, num_mol)
 
         if message == "The time-averaged velocities of the photon and molecules are consistent with the initial temperature.":
@@ -360,7 +378,7 @@ if __name__ == "__main__":
         print('\n ' \
         'EQUIBILBRATION FAILED! \n' \
         'modify system parameters, script terminated')
-        #exit()
+        exit()
             
 
 
@@ -387,7 +405,7 @@ if __name__ == "__main__":
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Define time points
-    t_final = t_eq
+    t_final = 1000000
     time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
@@ -476,7 +494,8 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        ax.set_xlim(0,0.007)
+        ax.set_xlim((wc-2*lam)*au_to_ev , (wc+2*lam)*au_to_ev)
+        ax.set_ylim(0.0,1.1)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
         ax.spines['top'].set_linewidth(axis_thickness)
@@ -487,27 +506,27 @@ if __name__ == "__main__":
     #--------------------------
     ''' subplot1 L '''
     ax00 = axs[0,0]
-    ax00.plot(fftfreq_xcxc, np.abs(fft_xcxc.real)/np.max(np.abs(fft_xcxc.real)), label='FT(C_xcxc(t))', color='black')
+    ax00.plot(fftfreq_xcxc*au_to_ev, np.abs(fft_xcxc.real)/np.max(np.abs(fft_xcxc.real)), label='FT(C_xcxc(t))', color='black')
     ax00.legend(loc="upper right")
-    ax00.set_xlabel('Frequency (a.u.)')
+    ax00.set_xlabel('Frequency (eV)')
     ax00.set_ylabel('Photon position FT')
 
     ax01 = axs[0,1]
-    ax01.plot(fftfreq_vcvc, np.abs(fft_vcvc.real)/np.max(np.abs(fft_vcvc.real)), label='FT(C_vcvc(t))', color='black')
+    ax01.plot(fftfreq_vcvc*au_to_ev, np.abs(fft_vcvc.real)/np.max(np.abs(fft_vcvc.real)), label='FT(C_vcvc(t))', color='black')
     ax01.legend(loc="upper right")
-    ax01.set_xlabel('Frequency (a.u.)')
+    ax01.set_xlabel('Frequency (eV)')
     ax01.set_ylabel('Photon velocity FT')
 
     ax10 = axs[1,0]
-    ax10.plot(fftfreq_xx_bright, np.abs(fft_xx_bright.real)/np.max(np.abs(fft_xx_bright.real)), label='FT(C_xx_bright(t))', color='black')
+    ax10.plot(fftfreq_xx_bright*au_to_ev, np.abs(fft_xx_bright.real)/np.max(np.abs(fft_xx_bright.real)), label='FT(C_xx_bright(t))', color='black')
     ax10.legend(loc="upper right")
-    ax10.set_xlabel('Frequency (a.u.)')
+    ax10.set_xlabel('Frequency (eV)')
     ax10.set_ylabel('Bright state position autocorrelation')
 
     ax11 = axs[1,1]
-    ax11.plot(fftfreq_vv_bright, np.abs(fft_vv_bright.real)/np.max(np.abs(fft_vv_bright.real)), label='FT(C_vv_bright(t))', color='black')
+    ax11.plot(fftfreq_vv_bright*au_to_ev, np.abs(fft_vv_bright.real)/np.max(np.abs(fft_vv_bright.real)), label='FT(C_vv_bright(t))', color='black')
     ax11.legend(loc="upper right")
-    ax11.set_xlabel('Frequency (a.u.)')
+    ax11.set_xlabel('Frequency (eV)')
     ax11.set_ylabel('Bright state velocity autocorrelation')
 
     plt.show()
@@ -521,9 +540,9 @@ if __name__ == "__main__":
     # Plot the results
     plt.figure(figsize=[18,12])
     plt.title('Coupled Generalized Langevin')
-    plt.plot(time_points*aut_to_fs, xc_values_eq, label='xc(t)', color='black')
+    plt.plot(time_points[-100:]*aut_to_fs, xc_values[-500:], label='xc(t)', color='black')
     for i in range(num_mol):
-        plt.plot(time_points*aut_to_fs, xm_values_eq[i], label=f'xm{i+1}(t)')
+        plt.plot(time_points[-100:]*aut_to_fs, xm_values[i,-500:], label=f'xm{i+1}(t)')
     #plt.ylim(-4,8)
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
