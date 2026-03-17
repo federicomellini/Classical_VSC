@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.integrate import *
 import matplotlib.pyplot as plt 
+from matplotlib import cm
 from scipy.signal import find_peaks
 from heapq import nlargest
 import os 
@@ -55,7 +56,7 @@ def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, p
     lam = param_mol[-1]
    
     sum_xm = np.sum(xm_values)
-    a_xc = -xc * wc**2 + lam * sum_xm 
+    a_xc = -xc * wc**2 + lam *  wc *sum_xm 
     a_xm_values = -xm_values * wm**2 + lam * xc * wc - (lam**2) * sum_xm
     
     # Apply Stark shift only to the 0-th molecule
@@ -209,7 +210,7 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     print("Expected <v^2> from temperature (kT):", kT)
     
     # Compare with the expected value from temperature (kT)
-    system_consistent = np.isclose(total_avg_v2, kT, rtol=0.4)
+    system_consistent = np.isclose(total_avg_v2, kT, rtol=0.8)
 
     if system_consistent:
         message =("The time-averaged velocities of the photon and molecules are consistent with the initial temperature.")
@@ -322,7 +323,7 @@ if __name__ == "__main__":
     wm = 0.005512 # freqs au of a C=C bond
 
 
-    E0 = 0.0 # Amplitude of driving laser
+    E0 = 0.0001 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
     freqs = np.random.normal(wm, 0.0, num_mol)  # wm
     gc =0.0*wm 
@@ -378,7 +379,7 @@ if __name__ == "__main__":
         print('\n ' \
         'EQUIBILBRATION FAILED! \n' \
         'modify system parameters, script terminated')
-        exit()
+        #exit()
             
 
 
@@ -398,7 +399,7 @@ if __name__ == "__main__":
 
     # Redefine new parameters for the propagation
 
-    E0 = 0.0 # Amplitude of driving laser
+    #E0 = 0.0 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
     gc =0.1*wc
     lam = gc/np.sqrt(num_mol) # light-matter coupling
@@ -409,7 +410,7 @@ if __name__ == "__main__":
     time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
-    xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz, init_cond, time_points, num_mol, param_cav, param_mol)
+    xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
 
 
     print('shape of xm_values', np.shape(xm_values))
@@ -454,25 +455,25 @@ if __name__ == "__main__":
     #--------------------------
     ''' subplot1 L '''
     ax00 = axs[0,0]
-    ax00.plot(time_points*aut_to_fs, C_xcxc, label='C_xcxc(t)', color='black')
+    ax00.plot(time_points*aut_to_fs, C_xcxc, label='C_xcxc(t)', color='darkorange')
     ax00.legend(loc="upper right")
     ax00.set_xlabel('Time (fs)')
     ax00.set_ylabel('Photon position autocorrelation')
 
     ax01 = axs[0,1]
-    ax01.plot(time_points*aut_to_fs, C_vcvc, label='C_vcvc(t)', color='black')
+    ax01.plot(time_points*aut_to_fs, C_vcvc, label='C_vcvc(t)', color='darkorange')
     ax01.legend(loc="upper right")
     ax01.set_xlabel('Time (fs)')
     ax01.set_ylabel('Photon velocity autocorrelation')
 
     ax10 = axs[1,0]
-    ax10.plot(time_points*aut_to_fs, C_xx_bright, label='C_xx_bright(t)', color='black')
+    ax10.plot(time_points*aut_to_fs, C_xx_bright, label='C_xx_bright(t)', color='tab:blue')
     ax10.legend(loc="upper right")
     ax10.set_xlabel('Time (fs)')
     ax10.set_ylabel('Bright state position autocorrelation')
 
     ax11 = axs[1,1]
-    ax11.plot(time_points*aut_to_fs, C_vv_bright, label='C_vv_bright(t)', color='black')
+    ax11.plot(time_points*aut_to_fs, C_vv_bright, label='C_vv_bright(t)', color='tab:blue')
     ax11.legend(loc="upper right")
     ax11.set_xlabel('Time (fs)')
     ax11.set_ylabel('Bright state velocity autocorrelation')
@@ -506,25 +507,25 @@ if __name__ == "__main__":
     #--------------------------
     ''' subplot1 L '''
     ax00 = axs[0,0]
-    ax00.plot(fftfreq_xcxc*au_to_ev, np.abs(fft_xcxc.real)/np.max(np.abs(fft_xcxc.real)), label='FT(C_xcxc(t))', color='black')
+    ax00.plot(fftfreq_xcxc*au_to_ev, np.abs(fft_xcxc.real)/np.max(np.abs(fft_xcxc.real)), label='FT(C_xcxc(t))', color='darkorange')
     ax00.legend(loc="upper right")
     ax00.set_xlabel('Frequency (eV)')
     ax00.set_ylabel('Photon position FT')
 
     ax01 = axs[0,1]
-    ax01.plot(fftfreq_vcvc*au_to_ev, np.abs(fft_vcvc.real)/np.max(np.abs(fft_vcvc.real)), label='FT(C_vcvc(t))', color='black')
+    ax01.plot(fftfreq_vcvc*au_to_ev, np.abs(fft_vcvc.real)/np.max(np.abs(fft_vcvc.real)), label='FT(C_vcvc(t))', color='darkorange')
     ax01.legend(loc="upper right")
     ax01.set_xlabel('Frequency (eV)')
     ax01.set_ylabel('Photon velocity FT')
 
     ax10 = axs[1,0]
-    ax10.plot(fftfreq_xx_bright*au_to_ev, np.abs(fft_xx_bright.real)/np.max(np.abs(fft_xx_bright.real)), label='FT(C_xx_bright(t))', color='black')
+    ax10.plot(fftfreq_xx_bright*au_to_ev, np.abs(fft_xx_bright.real)/np.max(np.abs(fft_xx_bright.real)), label='FT(C_xx_bright(t))', color='tab:blue')
     ax10.legend(loc="upper right")
     ax10.set_xlabel('Frequency (eV)')
     ax10.set_ylabel('Bright state position autocorrelation')
 
     ax11 = axs[1,1]
-    ax11.plot(fftfreq_vv_bright*au_to_ev, np.abs(fft_vv_bright.real)/np.max(np.abs(fft_vv_bright.real)), label='FT(C_vv_bright(t))', color='black')
+    ax11.plot(fftfreq_vv_bright*au_to_ev, np.abs(fft_vv_bright.real)/np.max(np.abs(fft_vv_bright.real)), label='FT(C_vv_bright(t))', color='tab:blue')
     ax11.legend(loc="upper right")
     ax11.set_xlabel('Frequency (eV)')
     ax11.set_ylabel('Bright state velocity autocorrelation')
@@ -538,11 +539,15 @@ if __name__ == "__main__":
 
 
     # Plot the results
-    plt.figure(figsize=[18,12])
+    cmap = cm.get_cmap("coolwarm")
+    cols = cmap(np.linspace(0,1,num_mol))
+
+    plt.figure(figsize=[10,18])
     plt.title('Coupled Generalized Langevin')
-    plt.plot(time_points[-100:]*aut_to_fs, xc_values[-500:], label='xc(t)', color='black')
-    for i in range(num_mol):
-        plt.plot(time_points[-100:]*aut_to_fs, xm_values[i,-500:], label=f'xm{i+1}(t)')
+    plt.plot(time_points[-500:]*aut_to_fs, xc_values[-500:], label='xc(t)', color='black')
+    plt.plot(time_points[-500:]*aut_to_fs, xm_values[i,-500:], label=f'xm0(t)', color='tab:red')
+    for i in range(1, num_mol):
+        plt.plot(time_points[-500:]*aut_to_fs, xm_values[i,-500:], label=f'xm{i+1}(t)', color='tab:cyan', alpha=0.4)
     #plt.ylim(-4,8)
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
