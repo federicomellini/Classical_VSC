@@ -316,14 +316,14 @@ if __name__ == "__main__":
     ##########################################
 
     # Set up number of molecules:
-    num_mol = 15
+    num_mol = 50
     
     # Set up parameters
     wc = 0.005512
     wm = 0.005512 # freqs au of a C=C bond
 
 
-    E0 = 0.0001 # Amplitude of driving laser
+    E0 = 0.000 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
     freqs = np.random.normal(wm, 0.0, num_mol)  # wm
     gc =0.0*wm 
@@ -401,12 +401,12 @@ if __name__ == "__main__":
 
     #E0 = 0.0 # Amplitude of driving laser
     param_cav = [wc, E0]  # wc, E
-    gc =0.1*wc
+    gc =0.5*wc
     lam = gc/np.sqrt(num_mol) # light-matter coupling
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Define time points
-    t_final = 1000000
+    t_final = 3000000
     time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
@@ -416,8 +416,8 @@ if __name__ == "__main__":
     ''' Calculate things '''
     
 
-    C_xcxc = autocorr(xm_values[0])
-    C_vcvc = autocorr(vm_values[0])
+    C_xcxc = autocorr(xc_values)
+    C_vcvc = autocorr(vc_values)
     C_xx_bright = bright_autocorr(xm_values)
     C_vv_bright = bright_autocorr(vm_values)
 
@@ -430,9 +430,31 @@ if __name__ == "__main__":
     energies = calc_energies(xm_values, vm_values, freqs)
     ipr = calc_ipr(energies)
 
-    # Average position of all molecules
-    av_pos = np.mean(xm_values)
-    print('Average position of the molecules:', av_pos)
+    # ---------------------------------------------------------
+    # STEP 4: Calculate Polarizabilities
+    # ---------------------------------------------------------
+    
+    # Time-averaged position for each molecule
+    avg_xm = np.mean(xm_values, axis=1) 
+    
+    # Guard against division by zero if E0 is exactly 0
+    E_field = E0 if E0 != 0 else 1e-10 
+    
+    # Calculate polarizability array (alpha_i = <x_i> / E)
+    alphas = avg_xm / E_field
+    
+    # Extract specific macroscopic metrics
+    alpha_local = alphas[0]
+    alpha_cross = np.mean(alphas[1:]) if num_mol > 1 else 0.0
+    alpha_global = np.mean(alphas)
+
+    print("\n--- Static Polarizability Results ---")
+    print(f"E-field strength (E0): {E0}")
+    print(f"Local Polarizability (Molecule 0): {alpha_local:.4e}")
+    if num_mol > 1:
+        print(f"Cross Polarizability (Molecules 1 to {num_mol-1}): {alpha_cross:.4e}")
+    print(f"Global Average Polarizability: {alpha_global:.4e}")
+    print("-------------------------------------\n")
 
 
     ''' PLOT '''
@@ -500,7 +522,7 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        ax.set_xlim((wc-2.5*lam)*au_to_ev , (wc+2.5*lam)*au_to_ev)
+        ax.set_xlim((wc-1.5*gc)*au_to_ev , (wc+1.5*gc)*au_to_ev)
         ax.set_ylim(0.0,1.1)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
@@ -549,10 +571,10 @@ if __name__ == "__main__":
 
     plt.figure(figsize=[12,6])
     plt.title('Coupled Generalized Langevin')
-    plt.plot(time_points[-500:]*aut_to_fs, xc_values[-500:], label='xc(t)', color='black')
-    plt.plot(time_points[-500:]*aut_to_fs, xm_values[i,-500:], label=f'xm0(t)', color='tab:red')
+    plt.plot(time_points[-800:]*aut_to_fs, xc_values[-800:], label='xc(t)', color='black')
+    plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm0(t)', color='tab:red')
     for i in range(1, num_mol):
-        plt.plot(time_points[-500:]*aut_to_fs, xm_values[i,-500:], label=f'xm{i+1}(t)', color='tab:cyan', alpha=0.4)
+        plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm{i+1}(t)', color='tab:cyan', alpha=0.4)
     #plt.ylim(-4,8)
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
@@ -570,6 +592,32 @@ if __name__ == "__main__":
     plt.ylabel('Values')
     plt.show()
     #plt.legend()
+
+
+
+    # Plot Polarizabilities
+    # ---------------------------------------------------------
+    plt.figure(figsize=[10, 5], constrained_layout=True)
+    plt.title(f'Static Polarizability per unperturbed Molecule (N={num_mol})')
+    
+    # Create an array of molecule indices
+    mol_indices = np.arange(1, num_mol)
+    alphas_unpert = alphas[1:]
+    
+    # Use different colors to distinguish the "local" molecule from the rest
+    colors = ['tab:cyan' for i in range(num_mol)]
+    
+    plt.bar(mol_indices, alphas_unpert, color=colors, edgecolor='black', zorder=3)
+    
+    # Add a horizontal line for 0 to guide the eye
+    plt.axhline(0, color='black', linewidth=1, zorder=2)
+    
+    plt.xlabel('Molecule Index')
+    plt.ylabel(r'Polarizability $\alpha = \langle x \rangle / E_0$ (a.u.)')
+    plt.grid(axis='y', linestyle='--', alpha=0.7, zorder=1)
+    plt.xticks(mol_indices)
+    
+    plt.show()
 
 
     exit()
