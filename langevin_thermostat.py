@@ -204,10 +204,10 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     # Combine the photon and molecule contributions
     total_avg_v2 = (v2_photon + avg_v2_molecules * num_mol) / (num_mol + 1)
     
-    print("Time-averaged <v^2> for photon:", v2_photon)
-    print("Average <v^2> for molecules:", avg_v2_molecules)
-    print("Combined average <v^2> for system (photon + molecules):", total_avg_v2)
-    print("Expected <v^2> from temperature (kT):", kT)
+    #print("Time-averaged <v^2> for photon:", v2_photon)
+    #print("Average <v^2> for molecules:", avg_v2_molecules)
+    #print("Combined average <v^2> for system (photon + molecules):", total_avg_v2)
+    #print("Expected <v^2> from temperature (kT):", kT)
     
     # Compare with the expected value from temperature (kT)
     system_consistent = np.isclose(total_avg_v2, kT, rtol=0.8)
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     ##########################################
 
     # Set up number of molecules:
-    num_mol = 10
+    num_mol = 15
     
     # Set up parameters
     wc = 0.005512
@@ -413,7 +413,7 @@ if __name__ == "__main__":
     xc_values, vc_values, xm_values, vm_values = velocity_verlet(Pauli_Fierz_static_local, init_cond, time_points, num_mol, param_cav, param_mol)
 
 
-    print('shape of xm_values', np.shape(xm_values))
+    ''' Calculate things '''
     
 
     C_xcxc = autocorr(xm_values[0])
@@ -427,7 +427,12 @@ if __name__ == "__main__":
     fft_vv_bright, fftfreq_vv_bright = fft_autocorr(C_vv_bright)
     
 
+    energies = calc_energies(xm_values, vm_values, freqs)
+    ipr = calc_ipr(energies)
 
+    # Average position of all molecules
+    av_pos = np.mean(xm_values)
+    print('Average position of the molecules:', av_pos)
 
 
     ''' PLOT '''
@@ -495,7 +500,7 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        ax.set_xlim((wc-2*lam)*au_to_ev , (wc+2*lam)*au_to_ev)
+        ax.set_xlim((wc-2.5*lam)*au_to_ev , (wc+2.5*lam)*au_to_ev)
         ax.set_ylim(0.0,1.1)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
@@ -542,7 +547,7 @@ if __name__ == "__main__":
     cmap = cm.get_cmap("coolwarm")
     cols = cmap(np.linspace(0,1,num_mol))
 
-    plt.figure(figsize=[10,18])
+    plt.figure(figsize=[12,6])
     plt.title('Coupled Generalized Langevin')
     plt.plot(time_points[-500:]*aut_to_fs, xc_values[-500:], label='xc(t)', color='black')
     plt.plot(time_points[-500:]*aut_to_fs, xm_values[i,-500:], label=f'xm0(t)', color='tab:red')
@@ -556,10 +561,21 @@ if __name__ == "__main__":
 
     plt.show()
 
+
+    plt.figure(figsize=[12,6])
+    plt.title('IPR')
+    #for i in range(num_mol):
+    plt.plot(time_points*aut_to_fs, ipr, label='ipr', color='tab:blue')
+    plt.xlabel('Time (fs)')
+    plt.ylabel('Values')
+    plt.show()
+    #plt.legend()
+
+
     exit()
 
     # Plot the results
-    plt.figure(figsize=[12,6])
+    plt.figure(figsize=[6,12])
     plt.title('Autocorrelation function')
     plt.plot(time_points*aut_to_fs, C_xcxc, label='C_xcxc(t)', color='black')
     #for i in range(num_mol):
