@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from scipy.integrate import *
 import matplotlib.pyplot as plt 
 from matplotlib import cm
@@ -67,51 +68,6 @@ def Pauli_Fierz_static_local(xc, vc, xm_values, vm_values, num_mol, param_cav, p
 #------------------------------------------------------------------------------------------#
 
 ''' Define Velocity Verlet algorithm'''
-def velocity_verlet_old(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
-    """
-    Velocity verlet algorith implementing the generalized langevin EOM
-    from Tuckerman, eq (15.5.17)
-    """
-    n_points = len(time_points)
-    dt = time_points[1] - time_points[0]
-    
-    # Initialize arrays to store positions and velocities
-    xc_values = np.zeros(n_points)
-    vc_values = np.zeros(n_points)
-    xm_values = np.zeros((num_mol, n_points))
-    vm_values = np.zeros((num_mol, n_points))
-    
-    # Set initial conditions
-    xc_values[0], vc_values[0] = init_cond[:2]
-    xm_values[:, 0], vm_values[:, 0] = init_cond[2:num_mol+2], init_cond[num_mol+2:(num_mol+2)+num_mol]
-    
-    for i in range(n_points - 1):
-        t = time_points[i]
-        
-        # Calculate current accelerations
-        a_xc, a_xm_values = acceleration(xc_values[i], vc_values[i], xm_values[:, i], vm_values[:, i], num_mol, param_cav, param_mol, t)
-        
-        # Update positions
-        R_c = sigma_c * dt**(3 / 2) * (0.5*np.random.normal(0.0, 1.0, 1) + 1/(2*np.sqrt(3))*np.random.normal(0.0, 1.0, 1)) # xi and theta
-        #print('current xm_values[:,i]:', xm_values[:,i])
-        xc_values[i + 1] = xc_values[i] + vc_values[i] * dt + 0.5 * (a_xc - k * vc_values[i]) * dt**2  + R_c.item()
-
-        for j in range(num_mol):
-            R_m = sigma_m * dt ** (3 / 2) * (0.5*np.random.normal(0.0, 1.0, 1) + 1/(2*np.sqrt(3))*np.random.normal(0.0, 1.0, 1))  # xi and theta
-            #print('current R_m:', R_m)
-            xm_values[j, i + 1] = xm_values[j, i] + vm_values[j, i] * dt + 0.5 * (a_xm_values[j] - lamb * vm_values[j, i]) * dt ** 2 + R_m.item()
-        
-        # Calculate new accelerations at the new positions
-        a_xc_new, a_xm_values_new = acceleration(xc_values[i + 1], vc_values[i], xm_values[:, i + 1], vm_values[:, i], num_mol, param_cav, param_mol, t + dt)
-        
-        # Update velocities
-        vc_values[i + 1] = vc_values[i] + 0.5 * (a_xc + a_xc_new) * dt - k * vc_values[i]*dt + sigma_c * np.sqrt(dt) * np.random.normal(0.0, 1.0, 1).item() - k *(0.5 * dt ** 2 * (a_xc - k * vc_values[i]) + R_c.item())
-        for j in range(num_mol):
-            vm_values[j, i + 1] = vm_values[j, i] + 0.5 * (a_xm_values[j] + a_xm_values_new[j]) * dt - lamb * vm_values[j, i]*dt + sigma_m * np.sqrt(dt) * np.random.normal(0.0, 1.0, 1).item() - lamb * (0.5 * dt ** 2 * (a_xm_values[j] - lamb * vm_values[j, i]) + R_m.item())
-    
-    return xc_values, vc_values, xm_values, vm_values
-
-
 def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, param_mol):
     """
     Velocity verlet algorithm implementing the generalized langevin EOM
@@ -199,15 +155,13 @@ def check_temperature_consistency(vc_values, vm_values, kT, num_mol):
     # Average <v^2> across all molecules
     avg_v2_molecules = np.mean(v2_molecules)
 
-
-
-    # Combine the photon and molecule contributions
-    total_avg_v2 = (v2_photon + avg_v2_molecules * num_mol) / (num_mol + 1)
-    
     #print("Time-averaged <v^2> for photon:", v2_photon)
     #print("Average <v^2> for molecules:", avg_v2_molecules)
     #print("Combined average <v^2> for system (photon + molecules):", total_avg_v2)
     #print("Expected <v^2> from temperature (kT):", kT)
+
+    # Combine the photon and molecule contributions
+    total_avg_v2 = (v2_photon + avg_v2_molecules * num_mol) / (num_mol + 1)
     
     # Compare with the expected value from temperature (kT)
     system_consistent = np.isclose(total_avg_v2, kT, rtol=0.8)
@@ -303,7 +257,9 @@ def calc_ipr(energies):
 
 #-------------------------------------------------------------------------------------#
 
+
 if __name__ == "__main__":
+    start_time = time.time()
 
     # Definite conversion factors:
 
@@ -316,7 +272,7 @@ if __name__ == "__main__":
     ##########################################
 
     # Set up number of molecules:
-    num_mol = 50
+    num_mol = 10
     
     # Set up parameters
     wc = 0.005512
@@ -331,13 +287,13 @@ if __name__ == "__main__":
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Set up friction coefficients k, lamb and random kick sigma: 
-    k    = 1.0e-5 # Friction coeff for photon
-    lamb = 1.0e-5 # Friction coeff for molecules
+    k    = 2.0e-5 # Friction coeff for photon
+    lamb = 2.0e-5 # Friction coeff for molecules
     kT   = 1.0*9.44e-4 # 9.44x10⁻4 au is value of room temperature energy 25,7 meV
     beta = 1/kT
     mu   = 1
-    sigma_c = np.sqrt(2*kT*k/mu)
-    sigma_m = np.sqrt(2*kT*lamb/mu)
+    sigma_c = 0 #np.sqrt(2*kT*k/mu)
+    sigma_m = 0 #np.sqrt(2*kT*lamb/mu)
 
     # Not really that important how the initial conditions are chosen, because of Markovianity
     # Molecules
@@ -406,7 +362,7 @@ if __name__ == "__main__":
     param_mol = freqs.tolist() + [lam] # wm, lamba
 
     # Define time points
-    t_final = 3000000
+    t_final = 500000
     time_points = np.arange(0, t_final, t_step)  # Time points from 0 to 10
 
     # Solve the system using Velocity-Verlet algorithm
@@ -431,7 +387,7 @@ if __name__ == "__main__":
     ipr = calc_ipr(energies)
 
     # ---------------------------------------------------------
-    # STEP 4: Calculate Polarizabilities
+    # Calculate Polarizabilities
     # ---------------------------------------------------------
     
     # Time-averaged position for each molecule
@@ -441,7 +397,7 @@ if __name__ == "__main__":
     E_field = E0 if E0 != 0 else 1e-10 
     
     # Calculate polarizability array (alpha_i = <x_i> / E)
-    alphas = avg_xm / E_field
+    alphas = avg_xm #/ E_field
     
     # Extract specific macroscopic metrics
     alpha_local = alphas[0]
@@ -457,12 +413,14 @@ if __name__ == "__main__":
     print("-------------------------------------\n")
 
 
+
+    end_time = time.time()
+    elapsed = end_time - start_time
+    print(f"\nTotal runtime: {elapsed:.2f} seconds.")
+
     ''' PLOT '''
 
     fig, axs = plt.subplots(2, 2, figsize=(8,4), constrained_layout=True, sharex='col')
-
-    #xmin = 0
-    #xmax = 100
 
     # Axis thickness and label font size
     axis_thickness = 1.5
@@ -471,7 +429,6 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        #ax.set_ylim(0,0.003)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
         ax.spines['top'].set_linewidth(axis_thickness)
@@ -505,15 +462,12 @@ if __name__ == "__main__":
     ax11.set_xlabel('Time (fs)')
     ax11.set_ylabel('Bright state velocity autocorrelation')
 
+
     plt.show()
 
 
 
-
     fig, axs = plt.subplots(2, 2, figsize=(8,4), constrained_layout=True, sharex='col')
-
-    #xmin = 0
-    #xmax = 100
 
     # Axis thickness and label font size
     axis_thickness = 1.5
@@ -522,7 +476,7 @@ if __name__ == "__main__":
 
     # Set thicker axis lines globally
     for ax in axs.flat:
-        ax.set_xlim((wc-1.5*gc)*au_to_ev , (wc+1.5*gc)*au_to_ev)
+        ax.set_xlim((wc-1.0*gc)*au_to_ev , (wc+1.0*gc)*au_to_ev)
         ax.set_ylim(0.0,1.1)
         ax.tick_params(width=axis_thickness, labelsize=label_fontsize)
         ax.ticklabel_format(axis='y', style='sci', scilimits=(1,-1))
@@ -562,20 +516,14 @@ if __name__ == "__main__":
 
 
    
-
-
-
     # Plot the results
-    cmap = cm.get_cmap("coolwarm")
-    cols = cmap(np.linspace(0,1,num_mol))
 
     plt.figure(figsize=[12,6])
     plt.title('Coupled Generalized Langevin')
-    plt.plot(time_points[-800:]*aut_to_fs, xc_values[-800:], label='xc(t)', color='black')
-    plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm0(t)', color='tab:red')
+    plt.plot(time_points[-800:]*aut_to_fs, xc_values[-800:], label='xc(t)', color='black', zorder=3)
+    plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm0(t)', color='tab:red', zorder=3)
     for i in range(1, num_mol):
-        plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm{i+1}(t)', color='tab:cyan', alpha=0.4)
-    #plt.ylim(-4,8)
+        plt.plot(time_points[-800:]*aut_to_fs, xm_values[i,-800:], label=f'xm{i+1}(t)', color='tab:cyan', alpha=0.2)
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
 
@@ -586,12 +534,10 @@ if __name__ == "__main__":
 
     plt.figure(figsize=[12,6])
     plt.title('IPR')
-    #for i in range(num_mol):
     plt.plot(time_points*aut_to_fs, ipr, label='ipr', color='tab:blue')
     plt.xlabel('Time (fs)')
     plt.ylabel('Values')
     plt.show()
-    #plt.legend()
 
 
 
