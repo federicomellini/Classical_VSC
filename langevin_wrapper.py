@@ -90,39 +90,7 @@ def build_pauli_fierz(molecular_force_func, driven=False, static_global=False, s
     return acceleration
 
 
-''' --- 3. Velocity Verlet Algorithms --- '''
-
-def velocity_verlet_old(acceleration, init_cond, time_points, num_mol, param_cav, mol_params):
-    n_points = len(time_points)
-    dt = time_points[1] - time_points[0]
-    
-    xc_values = np.zeros(n_points)
-    vc_values = np.zeros(n_points)
-    xm_values = np.zeros((num_mol, n_points))
-    vm_values = np.zeros((num_mol, n_points))
-    
-    xc_values[0], vc_values[0] = init_cond[:2]
-    xm_values[:, 0], vm_values[:, 0] = init_cond[2:num_mol+2], init_cond[num_mol+2:(num_mol+2)+num_mol]
-    
-    for i in range(n_points - 1):
-        t = time_points[i]
-        
-        a_xc, a_xm_values = acceleration(xc_values[i], vc_values[i], xm_values[:, i], vm_values[:, i], num_mol, param_cav, mol_params, t)
-        
-        R_c = sigma_c * dt**(3 / 2) * (0.5*np.random.normal(0.0, 1.0, 1) + 1/(2*np.sqrt(3))*np.random.normal(0.0, 1.0, 1))
-        xc_values[i + 1] = xc_values[i] + vc_values[i] * dt + 0.5 * (a_xc - k * vc_values[i]) * dt**2  + R_c.item()
-
-        for j in range(num_mol):
-            R_m = sigma_m * dt ** (3 / 2) * (0.5*np.random.normal(0.0, 1.0, 1) + 1/(2*np.sqrt(3))*np.random.normal(0.0, 1.0, 1))
-            xm_values[j, i + 1] = xm_values[j, i] + vm_values[j, i] * dt + 0.5 * (a_xm_values[j] - lamb * vm_values[j, i]) * dt ** 2 + R_m.item()
-        
-        a_xc_new, a_xm_values_new = acceleration(xc_values[i + 1], vc_values[i], xm_values[:, i + 1], vm_values[:, i], num_mol, param_cav, mol_params, t + dt)
-        
-        vc_values[i + 1] = vc_values[i] + 0.5 * (a_xc + a_xc_new) * dt - k * vc_values[i]*dt + sigma_c * np.sqrt(dt) * np.random.normal(0.0, 1.0, 1).item() - k *(0.5 * dt ** 2 * (a_xc - k * vc_values[i]) + R_c.item())
-        for j in range(num_mol):
-            vm_values[j, i + 1] = vm_values[j, i] + 0.5 * (a_xm_values[j] + a_xm_values_new[j]) * dt - lamb * vm_values[j, i]*dt + sigma_m * np.sqrt(dt) * np.random.normal(0.0, 1.0, 1).item() - lamb * (0.5 * dt ** 2 * (a_xm_values[j] - lamb * vm_values[j, i]) + R_m.item())
-    
-    return xc_values, vc_values, xm_values, vm_values
+''' --- 3. Velocity Verlet Algorithm --- '''
 
 
 def velocity_verlet(acceleration, init_cond, time_points, num_mol, param_cav, mol_params):
